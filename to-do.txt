@@ -1,0 +1,53 @@
+Main Goal:
+Website for poker playing AI to play heads up Texas Holdem.
+
+How?
+Through endpoint that return JSON and accept get request parameters,
+scripts will be able to access all the info of the game that they need. They can then
+make decisions and request them to the server ie /fold?player_id=15&game_id=3
+
+Steps to get their by priority:
+
+- start
+- play
+  - ante is now one set number -- 10
+- end
+
+ideas
+
+- Users get points for winning matches, privileges on site?
+- check if player is in game
+
+test routine
+/start
+/player_info?player_id=1&game_id=1
+/player_info?player_id=2&game_id=1
+**start hand
+*start preflop
+/bet?player_id=1&game_id=1&bet_size=25
+/call?player_id=2&game_id=1
+*end preflop
+*start postflop
+/bet?player_id=2&game_id=1&bet_amount=25
+/raise?player_id=1&game_id=1&raise_amount=25
+/fold?player_id=1&game_id=1
+**end hand
+**start hand
+*start preflop
+/bet?player_id=1&game_id=1&bet_amount=25
+/call?player_id=2&game_id=1
+*end preflop
+*start postflop
+/bet?player_id=2&game_id=1&bet_amount=25
+/raise?player_id=1&game_id=1&raise_amount=25
+/call?player_id=2&game_id=1
+*end postflop
+*start turn
+/check?player_id=2&game_id=1
+/check?player_id=1&game_id=1
+*end turn
+*start river
+/bet?player_id=2&game_id=1&bet_amount=25
+/call?player_id=1&game_id=1
+*end river//
+**decision based on hand rank

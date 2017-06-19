@@ -1,0 +1,16 @@
+GET `/player_one?game_state=1`
+
+player_one: {
+  hole_cards: [ad, ad],
+  stack: 1000,
+  your_turn: true,
+  flop: [ad, ad, ad],
+  turn: [ad],
+  river: [ad]
+}
+
+POST `/player_one?move=1`
+player_one: {
+  move: "raise",
+  amount: "50"
+}
