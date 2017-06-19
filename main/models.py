@@ -120,6 +120,8 @@ class Game(Model):
     phase_of_hand = models.PositiveIntegerField(null=True)
     # to keep track of what player 1 bet when it's player 2's turn
     last_bet_size = models.PositiveIntegerField(null=True)
+    # is there a bet active?
+    bet_active = models.BooleanField()
 
     def cards_shown_on_board(self):
         cards = ast.literal_eval(self.cards_on_board)
@@ -168,6 +170,7 @@ class Game(Model):
 
     def update_last_bet_size(self, bet_size):
         self.last_bet_size = bet_size
+        self.bet_active = True
         self.save()
 
     def end_phase(self):
@@ -183,10 +186,10 @@ class Game(Model):
     def update_phase_of_hand(self):
         if self.phase_of_hand == 4:
             self.phase_of_hand = 1
-            self.save()
         else:
             self.phase_of_hand = self.phase_of_hand + 1
-            self.save()
+        self.bet_active = False
+        self.save()
 
     def clear_pot(self):
         self.current_pot = 0

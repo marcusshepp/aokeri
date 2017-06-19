@@ -215,6 +215,7 @@ def players_game_info(r, *a, **kw):
             data["is_your_turn"] = player_obj.number == game.players_turn
             data["community_cards"] = game.cards_shown_on_board()
             data["last_bet_size"] = game.last_bet_size
+            data["pot_size"] = game.current_pot
     if not game_id:
         data['no_game_id'] = True
     if not player_id:
