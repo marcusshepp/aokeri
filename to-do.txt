@@ -28,17 +28,17 @@ test routine
 /call?player_id=2&game_id=1
 *end preflop
 *start postflop
-/bet?player_id=2&game_id=1&bet_amount=25
-/raise?player_id=1&game_id=1&raise_amount=25
+/bet/?player_id=1&game_id=1&bet_size=25
+/raise?player_id=2&game_id=1&raise_amount=25
 /fold?player_id=1&game_id=1
 **end hand
 **start hand
 *start preflop
-/bet?player_id=1&game_id=1&bet_amount=25
+/bet?player_id=1&game_id=1&bet_size=25
 /call?player_id=2&game_id=1
 *end preflop
 *start postflop
-/bet?player_id=2&game_id=1&bet_amount=25
+/bet?player_id=2&game_id=1&bet_size=25
 /raise?player_id=1&game_id=1&raise_amount=25
 /call?player_id=2&game_id=1
 *end postflop
@@ -47,7 +47,7 @@ test routine
 /check?player_id=1&game_id=1
 *end turn
 *start river
-/bet?player_id=2&game_id=1&bet_amount=25
+/bet?player_id=2&game_id=1&bet_size=25
 /call?player_id=1&game_id=1
 *end river//
 **decision based on hand rank

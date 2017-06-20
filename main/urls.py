@@ -6,7 +6,8 @@ from main.views import (
     call,
     fold,
     bet,
-    _raise
+    _raise,
+    bar
 )
 
 urlpatterns = [
@@ -16,4 +17,5 @@ urlpatterns = [
     url(r'^fold/$', fold),
     url(r'^bet/$', bet),
     url(r'^raise/$', _raise),
+    url(r'^bar/$', bar),
 ]

@@ -1,3 +1,5 @@
+import copy
+
 from django.shortcuts import render
 from django.http import JsonResponse
 
@@ -6,6 +8,7 @@ from main.models import (
     generate_cards,
     Game,
     Player,
+    winning_hand
 )
 
 def create_new_game(cards_used, cards_on_board):
@@ -20,6 +23,7 @@ def create_new_game(cards_used, cards_on_board):
     game_data["cards_on_board"] = str(cards_on_board)
     game_data["phase_of_hand"] = 1 # preflop
     game_data["current_pot"] = 0
+    game_data["bet_active"] = False
     Game.objects.create(**game_data)
 
 def create_new_player(stack, current_game, hole_cards, number):
@@ -192,6 +196,8 @@ def players_game_info(r, *a, **kw):
         - ante
         - is ur turn
         - last bet size
+        - phase of hand
+        - bet active
     """
     player_id = r.GET.get("player_id")
     game_id = r.GET.get("game_id")
@@ -216,6 +222,8 @@ def players_game_info(r, *a, **kw):
             data["community_cards"] = game.cards_shown_on_board()
             data["last_bet_size"] = game.last_bet_size
             data["pot_size"] = game.current_pot
+            data["phase_of_hand"] = game.phase_of_hand_str()
+            data["bet_active"] = game.bet_active
     if not game_id:
         data['no_game_id'] = True
     if not player_id:
@@ -250,6 +258,12 @@ def is_players_turn(game, player):
 def not_your_turn():
     return JsonResponse( { "not_your_turn": True } )
 
+def players_from_game_id(game_id):
+    players = Player.objects.filter(current_game__id=game_id)
+    if players:
+        if players.count() == 2:
+            player_one, player_two = players
+            return player_one, player_two
 
 """
 The following endpoints take the following parameters.
@@ -286,8 +300,51 @@ def fold(r, *a, **kw):
     """
     An endpoint for the `fold` action.
     Will trigger `end of phase`
+    end hand
+    change players turn
+    update pot to zero
+    declare a winner
+    update players stack
     """
+    player_id = r.GET.get("player_id")
+    player_id = int(player_id)
+    player = player_from_player_id(player_id)
+    game_id = r.GET.get("game_id")
+    game = game_from_game_id(game_id)
     data = {}
+    if is_players_turn(game, player):
+        if player:
+            if game:
+                players = players_from_game_id(game.id)
+                print players
+                if players:
+                    player_one, player_two = players
+                    print player_two.id, player_id
+                    print player_one.id, player_id
+                    folder = None
+                    if player_one.id == player_id:
+                        folder = player_one
+                    elif player_two.id == player_id:
+                        folder = player_two
+                    if folder:
+                        data["folder_id"] = folder.id
+                        data["player_id"] = player_id
+                        game.update_players_turn()
+                        winner = winning_hand(
+                            player_one.hole_cards,
+                            player_two.hole_cards,
+                            game.cards_on_board
+                        )
+                        data["winner"] = winner
+                        data["player_one_hole_cards"] = player_one.hole_cards
+                        data["player_two_hole_cards"] = player_two.hole_cards
+                        data["community_cards"] = game.cards_on_board
+            else:
+                data["no_game_id"] = True
+        else:
+            data["no_player_id"] = True
+    else:
+        data["not_your_turn"] = True
     data["fold"] = True
     return JsonResponse(data)
 
@@ -325,7 +382,50 @@ def bet(r, *a, **kw):
     return JsonResponse(data)
 
 def _raise(r, *a, **kw):
-    """ An endpoint for the `raise` action. """
+    """
+    An endpoint for the `raise` action.
+    take from player stack
+    add to pot_size
+    update players turn
+    """
+    player_id = r.GET.get("player_id")
+    player = player_from_player_id(player_id)
+    game_id = r.GET.get("game_id")
+    game = game_from_game_id(game_id)
     data = {}
+    if is_players_turn(game, player):
+        if game:
+            if player:
+                raise_amount = r.GET.get("raise_amount")
+                data["raise_amount"] = raise_amount
+                # take from player stack
+                player.update_stack(amount=raise_amount)
+                # add raise amount to pot_size
+                game.update_pot(raise_amount)
+                data["new_pot_size"] = game.current_pot
+                # update who's turn it is
+                game.update_players_turn()
+            else:
+                data["no_player_id"] = True
+        else:
+            data["no_game_id"] = True
+    else:
+        data["not_your_turn"] = True
     data["raise"] = True
     return JsonResponse(data)
+
+def bar(r, *a, **kw):
+    game = Game.objects.get(id=2)
+    game.phase_of_hand = 4
+    game.save()
+    players = Player.objects.filter(current_game__id=2)
+    print players[0].hole_cards
+    print players[1].hole_cards
+    print game.cards_on_board
+    winner = winning_hand(players[0].hole_cards, players[1].hole_cards, game.cards_on_board)
+    return JsonResponse({
+        "hand_one": players[0].hole_cards,
+        "hand_two": players[1].hole_cards,
+        "winner": winner,
+        "community_cards": game.cards_on_board
+    })

@@ -17,6 +17,9 @@ import ast
 from django.db import models
 from django.db.models import Model
 
+from pokereval.card import Card
+from pokereval.hand_evaluator import HandEvaluator
+
 card_numbers = [
     "A",
     "K",
@@ -32,6 +35,7 @@ card_numbers = [
     "3",
     "2"
 ]
+
 suits = [
     "C",
     "S",
@@ -39,7 +43,29 @@ suits = [
     "D"
 ]
 
-game_state = {}
+suits_to_num = {
+    "C": 4,
+    "S": 1,
+    "H": 2,
+    "D": 3,
+}
+
+card_numbers_to_num = {
+    "A": 14,
+    "K": 13,
+    "Q": 12,
+    "J": 11,
+    "T": 10,
+    "9": 9,
+    "8": 8,
+    "7": 7,
+    "6": 6,
+    "5": 5,
+    "4": 4,
+    "3": 3,
+    "2": 2,
+}
+
 
 def all_cards():
     deck = []
@@ -79,6 +105,43 @@ def divide_cards(cards_in_play):
     player_two_hole_cards = cards[2:4]
     return cards, cards_on_board, player_one_hole_cards, player_two_hole_cards
 
+def winning_hand(hand_one, hand_two, community_cards):
+    """
+    winning hand must have only five cards.
+    winning hand can use 0 or more of their hole cards.
+
+    """
+    hand_one = ast.literal_eval(hand_one)
+    hand_one =  [
+        Card(card_numbers_to_num[hand_one[0][0]], suits_to_num[hand_one[0][1]]),
+        Card(card_numbers_to_num[hand_one[1][0]], suits_to_num[hand_one[1][1]])
+    ]
+    hand_two = ast.literal_eval(hand_two)
+    hand_two = [
+        Card(card_numbers_to_num[hand_two[0][0]], suits_to_num[hand_two[0][1]]),
+        Card(card_numbers_to_num[hand_two[1][0]], suits_to_num[hand_two[1][1]])
+    ]
+    community_cards = ast.literal_eval(community_cards)
+    community_cards = [
+        Card(card_numbers_to_num[community_cards[0][0]], suits_to_num[community_cards[0][1]]),
+        Card(card_numbers_to_num[community_cards[1][0]], suits_to_num[community_cards[1][1]]),
+        Card(card_numbers_to_num[community_cards[2][0]], suits_to_num[community_cards[2][1]]),
+        Card(card_numbers_to_num[community_cards[3][0]], suits_to_num[community_cards[3][1]]),
+        Card(card_numbers_to_num[community_cards[4][0]], suits_to_num[community_cards[4][1]])
+    ]
+    hand_one_score = HandEvaluator.evaluate_hand(hand_one, community_cards)
+    hand_two_score = HandEvaluator.evaluate_hand(hand_two, community_cards)
+    print hand_one_score
+    print hand_two_score
+    best_hand = ""
+    if hand_one_score > hand_two_score:
+        best_hand = "player_one"
+    elif hand_one_score == hand_two_score:
+        best_hand = "tie"
+    else:
+        best_hand = "player_two"
+    return best_hand
+
 class Player(Model):
     stack = models.PositiveIntegerField(null=True)
     wins = models.IntegerField(null=True)
@@ -89,14 +152,14 @@ class Player(Model):
     number = models.PositiveIntegerField(null=False)
     current_bet_size = models.PositiveIntegerField(null=True)
 
-    def update_stack(self, amount, bet=True, win=False):
+    def update_stack(self, amount, bet=True, _raise=True, win=False):
         """
         Updates the players stack if they
         win a hand or bet a certain amount.
         Defaults to bet unless win is True.
         """
-        if bet:
-            self.stack = self.stack - amount
+        if bet or _raise:
+            self.stack = self.stack - int(amount)
         if win:
             self.stack = self.stack + self.current_game.current_pot
         self.save()
@@ -173,16 +236,6 @@ class Game(Model):
         self.bet_active = True
         self.save()
 
-    def end_phase(self):
-        """
-        Routine to run at the end of each phase.
-        - close out the hand properly if we are ending
-        on river.
-        - update players turn
-        ...
-        """
-        pass
-
     def update_phase_of_hand(self):
         if self.phase_of_hand == 4:
             self.phase_of_hand = 1
@@ -194,3 +247,11 @@ class Game(Model):
     def clear_pot(self):
         self.current_pot = 0
         self.save()
+
+    def end_hand(self, winner_id):
+        """
+        give winner the pot
+        clear pot
+        start next hand with the correct player deciding first
+        """
+        pass
