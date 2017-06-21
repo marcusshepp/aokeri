@@ -8,6 +8,7 @@ from main.models import (
     generate_cards,
     Game,
     Player,
+    players_from_game_id,
     winning_hand
 )
 
@@ -224,6 +225,9 @@ def players_game_info(r, *a, **kw):
             data["pot_size"] = game.current_pot
             data["phase_of_hand"] = game.phase_of_hand_str()
             data["bet_active"] = game.bet_active
+            players = Player.objects.filter(current_game__id=game.id)
+            opponent = [ player for player in players if player.id != player_obj.id ][0]
+            data["opponents_stack"] = opponent.stack
     if not game_id:
         data['no_game_id'] = True
     if not player_id:
@@ -258,12 +262,7 @@ def is_players_turn(game, player):
 def not_your_turn():
     return JsonResponse( { "not_your_turn": True } )
 
-def players_from_game_id(game_id):
-    players = Player.objects.filter(current_game__id=game_id)
-    if players:
-        if players.count() == 2:
-            player_one, player_two = players
-            return player_one, player_two
+
 
 """
 The following endpoints take the following parameters.
@@ -282,17 +281,47 @@ def call(r, *a, **kw):
     game_id = r.GET.get("game_id")
     game = game_from_game_id(game_id)
     data = {}
-    if game:
-        last_bet_size = game.last_bet_size
-        game.update_pot(last_bet_size)
-        game.update_phase_of_hand()
-        game.update_players_turn()
-        if player:
-            player.update_stack(amount=game.last_bet_size)
+    if is_players_turn(game, player):
+        if game:
+            if game.bet_active:
+                if player:
+                    last_bet_size = game.last_bet_size
+                    player.update_stack(amount=last_bet_size)
+                    game.update_pot(last_bet_size)
+                    game.update_players_turn()
+                    if game.phase_of_hand_str() == "river":
+                        player_one, player_two = players_from_game_id(game.id)
+                        winner = winning_hand(
+                            player_one.hole_cards,
+                            player_two.hole_cards,
+                            game.cards_on_board
+                        )
+                        data["winner"] = winner
+                        data["player_one_hole_cards"] = player_one.hole_cards
+                        data["player_two_hole_cards"] = player_two.hole_cards
+                        data["community_cards"] = game.cards_on_board
+                        if winner == "player_one":
+                            player_one.update_stack(win=True)
+                            game.end_hand(winner_id=player_one.id)
+                            data["winner_of_hand"] = "player_one"
+                        if winner == "player_two":
+                            player_two.update_stack(win=True)
+                            game.end_hand(winner_id=player_two.id)
+                            data["winner_of_hand"] = "player_two"
+                        data["end_hand"] = True
+                        game.update_phase_of_hand(end=True)
+                    else:
+                        data["new_stack_size"] = player.stack
+                        game.update_phase_of_hand()
+                        data["new_pot_size"] = game.current_pot
+                else:
+                    data['no_player_id'] = True
+            else:
+                data["no_bet_to_call"] = True
         else:
-            data['no_player_id'] = True
+            data['no_game_id'] = True
     else:
-        data['no_game_id'] = True
+        data["not_your_turn"] = True
     data["call"] = True
     return JsonResponse(data)
 
@@ -315,30 +344,27 @@ def fold(r, *a, **kw):
     if is_players_turn(game, player):
         if player:
             if game:
-                players = players_from_game_id(game.id)
-                print players
-                if players:
-                    player_one, player_two = players
-                    print player_two.id, player_id
-                    print player_one.id, player_id
-                    folder = None
-                    if player_one.id == player_id:
-                        folder = player_one
-                    elif player_two.id == player_id:
-                        folder = player_two
-                    if folder:
-                        data["folder_id"] = folder.id
-                        data["player_id"] = player_id
-                        game.update_players_turn()
-                        winner = winning_hand(
-                            player_one.hole_cards,
-                            player_two.hole_cards,
-                            game.cards_on_board
-                        )
-                        data["winner"] = winner
-                        data["player_one_hole_cards"] = player_one.hole_cards
-                        data["player_two_hole_cards"] = player_two.hole_cards
-                        data["community_cards"] = game.cards_on_board
+                if game.bet_active:
+                    players = players_from_game_id(game.id)
+                    if players:
+                        player_one, player_two = players
+                        folder = None
+                        winner_id = None
+                        if player_one.id == player_id:
+                            folder = player_one
+                            winner_id = player_two.id
+                            data["winner_of_hand"] = "player_two"
+                        elif player_two.id == player_id:
+                            folder = player_two
+                            winner_id = player_one.id
+                            data["winner_of_hand"] = "player_one"
+                        if folder:
+                            game.update_players_turn()
+                            game.update_phase_of_hand(end=True)
+                            game.end_hand(winner_id=winner_id)
+                            data["end_hand"] = True
+                else:
+                    data["no_bet_active"] = True
             else:
                 data["no_game_id"] = True
         else:
@@ -370,6 +396,8 @@ def bet(r, *a, **kw):
                     data["bet"] = True
                     data["new_pot_size"] = game.current_pot
                     data["bet_size"] = bet_size
+                    player.update_stack(amount=bet_size)
+                    data["new_stack_size"] = player.stack
                     game.update_players_turn()
                 else:
                     data["no_bet_size"] = True
@@ -413,6 +441,42 @@ def _raise(r, *a, **kw):
         data["not_your_turn"] = True
     data["raise"] = True
     return JsonResponse(data)
+
+def check(r, *a, **kw):
+    data = {}
+    player_id = r.GET.get("player_id")
+    player = player_from_player_id(player_id)
+    game_id = r.GET.get("game_id")
+    game = game_from_game_id(game_id)
+    if game:
+        if player:
+            if is_players_turn(game, player):
+                data["check"] = True
+                if game.phase_of_hand_str == "river":
+                    player_one, player_two = players_from_game_id(game.id)
+                    winner = winning_hand(
+                        player_one.hole_cards,
+                        player_two.hole_cards,
+                        game.cards_on_board
+                    )
+                    data["winner"] = winner
+                    data["player_one_hole_cards"] = player_one.hole_cards
+                    data["player_two_hole_cards"] = player_two.hole_cards
+                    data["community_cards"] = game.cards_on_board
+                    if winner == "player_one":
+                        player_one.update_stack(win=True)
+                    if winner == "player_two":
+                        player_two.update_stack(win=True)
+                    game.end_hand()
+                else:
+                    game.update_phase_of_hand()
+            else:
+                data["not_your_turn"] = True
+        else:
+            data["no_player_id"] = True
+    else:
+        data["no_game_id"] = True
+    JsonResponse(data)
 
 def bar(r, *a, **kw):
     game = Game.objects.get(id=2)

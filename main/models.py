@@ -131,8 +131,6 @@ def winning_hand(hand_one, hand_two, community_cards):
     ]
     hand_one_score = HandEvaluator.evaluate_hand(hand_one, community_cards)
     hand_two_score = HandEvaluator.evaluate_hand(hand_two, community_cards)
-    print hand_one_score
-    print hand_two_score
     best_hand = ""
     if hand_one_score > hand_two_score:
         best_hand = "player_one"
@@ -141,6 +139,13 @@ def winning_hand(hand_one, hand_two, community_cards):
     else:
         best_hand = "player_two"
     return best_hand
+
+def players_from_game_id(game_id):
+    players = Player.objects.filter(current_game__id=game_id)
+    if players:
+        if players.count() == 2:
+            player_one, player_two = players
+            return player_one, player_two
 
 class Player(Model):
     stack = models.PositiveIntegerField(null=True)
@@ -152,14 +157,15 @@ class Player(Model):
     number = models.PositiveIntegerField(null=False)
     current_bet_size = models.PositiveIntegerField(null=True)
 
-    def update_stack(self, amount, bet=True, _raise=True, win=False):
+    def update_stack(self, amount=0, bet=True, _raise=True, win=False):
         """
         Updates the players stack if they
         win a hand or bet a certain amount.
         Defaults to bet unless win is True.
         """
         if bet or _raise:
-            self.stack = self.stack - int(amount)
+            if amount:
+                self.stack = self.stack - int(amount)
         if win:
             self.stack = self.stack + self.current_game.current_pot
         self.save()
@@ -236,12 +242,15 @@ class Game(Model):
         self.bet_active = True
         self.save()
 
-    def update_phase_of_hand(self):
+    def update_phase_of_hand(self, end=False):
         if self.phase_of_hand == 4:
             self.phase_of_hand = 1
         else:
             self.phase_of_hand = self.phase_of_hand + 1
         self.bet_active = False
+        if end:
+            self.phase_of_hand = 1
+        print self.phase_of_hand_str()
         self.save()
 
     def clear_pot(self):
@@ -254,4 +263,20 @@ class Game(Model):
         clear pot
         start next hand with the correct player deciding first
         """
-        pass
+        player = Player.objects.get(id=winner_id)
+        if player:
+            player.stack = player.stack + self.current_pot
+            player.save()
+        self.current_pot = 0
+        self.save()
+        self.deal_new_cards()
+
+    def deal_new_cards(self):
+        cards, cards_on_board, player_one_hole_cards, player_two_hole_cards = generate_cards()
+        self.cards_on_board = cards_on_board
+        self.save()
+        player_one, player_two = players_from_game_id(self.id)
+        player_one.hole_cards = player_one_hole_cards
+        player_two.hole_cards = player_two_hole_cards
+        player_one.save()
+        player_two.save()
